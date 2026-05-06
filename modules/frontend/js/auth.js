@@ -137,8 +137,35 @@
       throw new Error(msg);
     }
 
-    /* User must confirm email — do not auto-login. Return null to signal pending. */
-    return null;
+    /* User must confirm email — return email so the UI can show the code step. */
+    const body = await res.json();
+    return { pending: true, email };
+  }
+
+  /* ── Confirm sign-up (email verification code) ───────────── */
+  async function confirmSignUp(email, code) {
+    _assertConfigured();
+
+    const res = await fetch(COGNITO_URL, {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/x-amz-json-1.1',
+        'X-Amz-Target': 'AWSCognitoIdentityProviderService.ConfirmSignUp',
+      },
+      body: JSON.stringify({
+        ClientId:         CLIENT_ID,
+        Username:         email,
+        ConfirmationCode: code,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const msg = err.message || err.__type || 'Confirmation failed.';
+      throw new Error(msg);
+    }
+
+    return true;
   }
 
   /* ── Refresh access token ─────────────────────────────────── */
@@ -191,6 +218,7 @@
   window.getToken       = getToken;
   window.login          = login;
   window.register       = register;
+  window.confirmSignUp  = confirmSignUp;
   window.refreshSession = refreshSession;
   window.logout         = logout;
 })();
