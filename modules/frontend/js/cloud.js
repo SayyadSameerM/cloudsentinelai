@@ -183,8 +183,14 @@ function awsStep2() {
   document.getElementById('aws-step-2').style.display='';
   setWizardStep(2);
 
-  /* Build CloudFormation URL */
-  const cfnUrl = 'https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?templateURL=https%3A%2F%2Fcloudsentinel-templates.s3.amazonaws.com%2Fscanner-role.yaml&stackName=CloudSentinel-Scanner';
+  /* Build CloudFormation URL — values injected from env.js at deploy time */
+  const TEMPLATE_URL = window.ENV_CFN_TEMPLATE_URL || '';
+  const LAMBDA_ROLE  = window.ENV_LAMBDA_ROLE_ARN  || '';
+  if (!TEMPLATE_URL) { showToast('CloudFormation template URL not configured.', 'error'); return; }
+  const cfnParams = LAMBDA_ROLE
+    ? `&param_CloudSentinelLambdaRoleArn=${encodeURIComponent(LAMBDA_ROLE)}&param_ExternalId=cloudsentinel`
+    : '';
+  const cfnUrl = `https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?templateURL=${encodeURIComponent(TEMPLATE_URL)}&stackName=CloudSentinel-Scanner${cfnParams}`;
   document.getElementById('cfn-link').href = cfnUrl;
   document.getElementById('cfn-instructions').style.display = selectedMethod==='cfn' ? '' : 'none';
   document.getElementById('tf-instructions').style.display  = selectedMethod==='tf'  ? '' : 'none';
@@ -200,9 +206,17 @@ function awsStep3() {
   document.getElementById('aws-step-3').style.display='';
   setWizardStep(3);
 
+  // Pre-fill expected Role ARN so user can verify
+  const roleArnInput = document.getElementById('aws-role-arn');
+  if (roleArnInput && !roleArnInput.value) {
+    roleArnInput.value = `arn:aws:iam::${accountId}:role/cloudsentinel-scanner-role`;
+  }
+
   const consentBox = document.getElementById('aws-consent');
   const confirmBtn = document.getElementById('btn-confirm-aws');
-  consentBox.addEventListener('change', () => { confirmBtn.disabled = !consentBox.checked; });
+  if (consentBox && confirmBtn) {
+    consentBox.addEventListener('change', () => { confirmBtn.disabled = !consentBox.checked; });
+  }
 }
 
 function setWizardStep(n) {
@@ -213,9 +227,17 @@ function setWizardStep(n) {
 }
 
 async function confirmAwsConnect() {
-  const accountId = document.getElementById('aws-account-id').value.trim();
+  const accountId  = document.getElementById('aws-account-id').value.trim();
+  const roleArnEl  = document.getElementById('aws-role-arn');
+  const roleArn    = roleArnEl ? roleArnEl.value.trim() : `arn:aws:iam::${accountId}:role/cloudsentinel-scanner-role`;
+
   closeModal('modal-aws');
-  setConnection(MODULE, 'aws', { accountId, connectedAt: new Date().toISOString(), method: selectedMethod });
+  setConnection(MODULE, 'aws', {
+    accountId,
+    roleArn,
+    connectedAt:  new Date().toISOString(),
+    method:       selectedMethod,
+  });
   updateProviderCard('aws', true);
   showToast('AWS account connected! Starting first scan…', 'success');
   await sleep(500);
